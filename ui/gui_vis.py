@@ -1,9 +1,11 @@
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
+import numpy as np
 
 
 class GUI_VIS(QWidget):
+    update_color = pyqtSignal(object)
     def __init__(self, win_size=256, scale=2.0):
         QWidget.__init__(self)
         self.result = None
@@ -55,7 +57,8 @@ class GUI_VIS(QWidget):
         x, y = self.scale_point(pos)
         if event.button() == Qt.LeftButton and self.is_valid_point(pos):  # click the point
             if self.result is not None:
-                color = self.result[y, x, :]  #
+                color = self.result[y, x, :].copy()
+                self.update_color.emit(color)
                 print('color', color)
 
     def mouseMoveEvent(self, event):

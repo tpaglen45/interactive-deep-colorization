@@ -5,6 +5,7 @@ import numpy as np
 
 
 class GUIPalette(QWidget):
+    update_color = pyqtSignal(object)
     def __init__(self, grid_sz=(6, 3)):
         QWidget.__init__(self)
         self.color_width = 25
@@ -73,7 +74,7 @@ class GUIPalette(QWidget):
         if color_id >= 0:
             print('choose color (%d) type (%s)' % (color_id, type(color_id)))
             color = self.colors[color_id]
-            self.emit(SIGNAL('update_color'), color)
+            self.update_color.emit(color)
             self.update()
 
     def mousePressEvent(self, event):

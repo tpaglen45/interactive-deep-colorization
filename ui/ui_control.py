@@ -35,14 +35,14 @@ class PointEdit(UserEdit):
         UserEdit.__init__(self, 'point', win_size, load_size, img_size)
 
     def add(self, pnt, color, userColor, width, ui_count):
-        self.pnt = pnt
+        self.pnt = QPoint(pnt)
         self.color = color
         self.userColor = userColor
         self.width = width
         self.ui_count = ui_count
 
     def select_old(self, pnt, ui_count):
-        self.pnt = pnt
+        self.pnt = QPoint(pnt)
         self.ui_count = ui_count
         return self.userColor, self.width
 
@@ -82,7 +82,11 @@ class PointEdit(UserEdit):
         else:
             painter.setPen(QPen(Qt.white, 1))
         painter.setBrush(ca)
-        painter.drawRoundedRect(self.pnt.x() - w, self.pnt.y() - w, 1 + 2 * w, 1 + 2 * w, 2, 2)
+        painter.drawRoundedRect(int(round(self.pnt.x() - w)),
+                                int(round(self.pnt.y() - w)),
+                                int(round(1 + 2 * w)),
+                                int(round(1 + 2 * w)),
+                                2, 2)
 
 
 class UIControl:

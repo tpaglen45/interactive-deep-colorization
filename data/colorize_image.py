@@ -219,7 +219,12 @@ class ColorizeImageTorch(ColorizeImageBase):
         print('path = %s' % path)
         print('Model set! dist mode? ', dist)
         self.net = model.SIGGRAPHGenerator(dist=dist)
-        state_dict = torch.load(path)
+        requested_gpu = gpu_id if gpu_id is not None and gpu_id >= 0 else None
+        if requested_gpu is not None and not torch.cuda.is_available():
+            print('CUDA requested but not available. Falling back to CPU.')
+            requested_gpu = None
+        map_location = None if requested_gpu is not None else torch.device('cpu')
+        state_dict = torch.load(path, map_location=map_location)
         if hasattr(state_dict, '_metadata'):
             del state_dict._metadata
 
@@ -227,8 +232,11 @@ class ColorizeImageTorch(ColorizeImageBase):
         for key in list(state_dict.keys()):  # need to copy keys here because we mutate in loop
             self.__patch_instance_norm_state_dict(state_dict, self.net, key.split('.'))
         self.net.load_state_dict(state_dict)
-        if gpu_id != None:
+        if requested_gpu is not None:
+            torch.cuda.set_device(requested_gpu)
             self.net.cuda()
+        else:
+            self.net.cpu()
         self.net.eval()
         self.net_set = True
 

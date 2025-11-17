@@ -3,10 +3,6 @@ import cv2
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
-try:
-    from PyQt4.QtCore import QString
-except ImportError:
-    QString = str
 from .ui_control import UIControl
 
 from data import lab_gamut
@@ -18,6 +14,13 @@ import sys
 
 
 class GUIDraw(QWidget):
+    update_color = pyqtSignal(str)
+    update_gamut = pyqtSignal(float)
+    suggest_colors = pyqtSignal(object)
+    used_colors = pyqtSignal(object)
+    update_ab = pyqtSignal(object)
+    update_result = pyqtSignal(object)
+
     def __init__(self, model, dist_model=None, load_size=256, win_size=512):
         QWidget.__init__(self)
         self.model = None
@@ -40,13 +43,14 @@ class GUIDraw(QWidget):
         self.total_images = 0
         self.image_id = 0
         self.method = 'with_dist'
+        self.selected_pos = None
 
     def clock_count(self):
         self.count_secs -= 1
         self.update()
 
     def init_result(self, image_file):
-        self.read_image(image_file.encode('utf-8'))  # read an image
+        self.read_image(image_file)  # read an image
         self.reset()
 
     def get_batches(self, img_dir):
@@ -123,13 +127,15 @@ class GUIDraw(QWidget):
         is_predict = False
         snap_qcolor = self.calibrate_color(self.user_color, self.pos)
         self.color = snap_qcolor
-        self.emit(SIGNAL('update_color'), QString('background-color: %s' % self.color.name()))
+        self.update_color.emit('background-color: %s' % self.color.name())
 
         if self.ui_mode == 'point':
             if move_point:
                 self.uiControl.movePoint(self.pos, snap_qcolor, self.user_color, self.brushWidth)
+                self.selected_pos = QPoint(self.pos)
             else:
                 self.user_color, self.brushWidth, isNew = self.uiControl.addPoint(self.pos, snap_qcolor, self.user_color, self.brushWidth)
+                self.selected_pos = QPoint(self.pos)
                 if isNew:
                     is_predict = True
                     # self.predict_color()
@@ -146,6 +152,7 @@ class GUIDraw(QWidget):
     def reset(self):
         self.ui_mode = 'none'
         self.pos = None
+        self.selected_pos = None
         self.result = None
         self.user_color = None
         self.color = None
@@ -181,17 +188,18 @@ class GUIDraw(QWidget):
         if pos is not None:
             x, y = self.scale_point(pos)
             L = self.im_lab[y, x, 0]
-            self.emit(SIGNAL('update_gamut'), L)
+            self.update_gamut.emit(float(L))
             rgb_colors = self.suggest_color(h=y, w=x, K=9)
-            rgb_colors[-1, :] = 0.5
-
-            self.emit(SIGNAL('suggest_colors'), rgb_colors)
+            if rgb_colors is not None:
+                rgb_colors[-1, :] = 0.5
+                self.suggest_colors.emit(rgb_colors)
             used_colors = self.uiControl.used_colors()
-            self.emit(SIGNAL('used_colors'), used_colors)
+            if used_colors is not None:
+                self.used_colors.emit(used_colors)
             snap_color = self.calibrate_color(self.user_color, pos)
             c = np.array((snap_color.red(), snap_color.green(), snap_color.blue()), np.uint8)
 
-            self.emit(SIGNAL('update_ab'), c)
+            self.update_ab.emit(c)
 
     def calibrate_color(self, c, pos):
         x, y = self.scale_point(pos)
@@ -205,11 +213,16 @@ class GUIDraw(QWidget):
         return snap_qcolor
 
     def set_color(self, c_rgb):
-        c = QColor(c_rgb[0], c_rgb[1], c_rgb[2])
+        c = QColor(int(c_rgb[0]), int(c_rgb[1]), int(c_rgb[2]))
         self.user_color = c
-        snap_qcolor = self.calibrate_color(c, self.pos)
+        target_pos = self.selected_pos if self.selected_pos is not None else self.pos
+        if target_pos is None:
+            self.color = self.user_color
+            self.update_color.emit('background-color: %s' % self.color.name())
+            return
+        snap_qcolor = self.calibrate_color(c, target_pos)
         self.color = snap_qcolor
-        self.emit(SIGNAL('update_color'), QString('background-color: %s' % self.color.name()))
+        self.update_color.emit('background-color: %s' % self.color.name())
         self.uiControl.update_color(snap_qcolor, self.user_color)
         self.compute_result()
 
@@ -217,8 +230,9 @@ class GUIDraw(QWidget):
         self.eraseMode = not self.eraseMode
 
     def load_image(self):
-        img_path = unicode(QFileDialog.getOpenFileName(self, 'load an input image'))
-        self.init_result(img_path)
+        img_path, _ = QFileDialog.getOpenFileName(self, 'load an input image')
+        if img_path:
+            self.init_result(img_path)
 
     def save_result(self):
         path = os.path.abspath(self.image_file)
@@ -283,7 +297,7 @@ class GUIDraw(QWidget):
         pred_lab = np.concatenate((self.l_win[..., np.newaxis], ab_win), axis=2)
         pred_rgb = (np.clip(color.lab2rgb(pred_lab), 0, 1) * 255).astype('uint8')
         self.result = pred_rgb
-        self.emit(SIGNAL('update_result'), self.result)
+        self.update_result.emit(self.result)
         self.update()
 
     def paintEvent(self, event):
@@ -304,7 +318,11 @@ class GUIDraw(QWidget):
         painter.end()
 
     def wheelEvent(self, event):
-        d = event.delta() / 120
+        try:
+            delta = event.angleDelta().y()
+        except AttributeError:
+            delta = event.delta()
+        d = delta / 120.0
         self.brushWidth = min(4.05 * self.scale, max(0, self.brushWidth + d * self.scale))
         print('update brushWidth = %f' % self.brushWidth)
         self.update_ui(move_point=True)
@@ -326,6 +344,7 @@ class GUIDraw(QWidget):
         if pos is not None:
             if event.button() == Qt.LeftButton:
                 self.pos = pos
+                self.selected_pos = QPoint(pos)
                 self.ui_mode = 'point'
                 self.change_color(pos)
                 self.update_ui(move_point=False)
@@ -334,6 +353,7 @@ class GUIDraw(QWidget):
             if event.button() == Qt.RightButton:
                 # draw the stroke
                 self.pos = pos
+                self.selected_pos = None
                 self.ui_mode = 'erase'
                 self.update_ui(move_point=False)
                 self.compute_result()
@@ -346,7 +366,10 @@ class GUIDraw(QWidget):
                 self.compute_result()
 
     def mouseReleaseEvent(self, event):
-        pass
+        if event.button() == Qt.LeftButton and self.ui_mode == 'point':
+            self.ui_mode = 'none'
+        if event.button() == Qt.RightButton and self.ui_mode == 'erase':
+            self.ui_mode = 'none'
 
     def sizeHint(self):
         return QSize(self.win_size, self.win_size)  # 28 * 8

@@ -7,6 +7,7 @@ import numpy as np
 
 
 class GUIGamut(QWidget):
+    update_color = pyqtSignal(object)
     def __init__(self, gamut_size=110):
         QWidget.__init__(self)
         self.gamut_size = gamut_size
@@ -45,7 +46,7 @@ class GUIGamut(QWidget):
         L = self.l_in
         lab = np.array([L, a, b])
         color = lab_gamut.lab2rgb_1d(lab, clip=True, dtype='uint8')
-        self.emit(SIGNAL('update_color'), color)
+        self.update_color.emit(color)
         self.update()
 
     def paintEvent(self, event):
@@ -64,10 +65,10 @@ class GUIGamut(QWidget):
         if self.pos is not None:
             painter.setPen(QPen(Qt.black, 2, Qt.SolidLine, cap=Qt.RoundCap, join=Qt.RoundJoin))
             w = 5
-            x = self.pos.x()
-            y = self.pos.y()
-            painter.drawLine(x - w, y, x + w, y)
-            painter.drawLine(x, y - w, x, y + w)
+            x = float(self.pos.x())
+            y = float(self.pos.y())
+            painter.drawLine(int(round(x - w)), int(round(y)), int(round(x + w)), int(round(y)))
+            painter.drawLine(int(round(x)), int(round(y - w)), int(round(x)), int(round(y + w)))
         painter.end()
 
     def mousePressEvent(self, event):
