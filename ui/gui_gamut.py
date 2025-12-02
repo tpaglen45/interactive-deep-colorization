@@ -31,6 +31,8 @@ class GUIGamut(QWidget):
     def is_valid_point(self, pos):
         if pos is None:
             return False
+        if self.mask is None:
+            return False
         else:
             x = pos.x()
             y = pos.y()
@@ -97,4 +99,6 @@ class GUIGamut(QWidget):
         self.lab = None
         self.pos = None
         self.mouseClicked = False
+        # initialize gamut mask so mouse events are safe before first color update
+        self.set_gamut()
         self.update()
